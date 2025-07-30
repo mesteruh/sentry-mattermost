@@ -212,4 +212,12 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         payload = self.create_payload(event)
         
         print(f"[MATTERMOST DEBUG] Calling send_to_mattermost")
-        return safe_execute(self.send_to_mattermost, channel_id, payload)
+        try:
+            result = self.send_to_mattermost(channel_id, payload)
+            print(f"[MATTERMOST DEBUG] Send result: {result}")
+            return result
+        except Exception as e:
+            print(f"[MATTERMOST ERROR] Exception in notify: {e}")
+            if raise_exception:
+                raise
+            return None
