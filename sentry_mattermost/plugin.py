@@ -44,6 +44,8 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         )
     ]
 
+
+
     def is_configured(self, project):
         channel_id = self.get_option("channel_id", project)
         token = os.getenv("MATTERMOST_TOKEN")
@@ -52,43 +54,88 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
     def get_mattermost_token(self):
         return os.getenv("MATTERMOST_TOKEN")
 
-    def render_notification(self, data, customFormat):
-        if customFormat:
-            template = customFormat
-        else:
-            template = "#### {project_name} - {env}\n{tags}\n\n{culprit}\n[{title}]({link})"
-        return template.format(**data)
-
     def create_payload(self, event):
         group = event.group
         project = group.project
+        
+        # Получаем данные из event (аналогично gjson в Go коде)
+        level = event.get_tag("level") or "error"
+        title = group.message_short or "Unknown Error"
+        event_id = event.event_id
+        project_name = project.name
+        project_id = str(project.id)
+        platform = event.platform or "unknown"
+        release = event.release or "unknown"
+        environment = event.get_environment().name if event.get_environment() else "unknown"
+        message = event.message or ""
+        url = group.get_absolute_url()
+        
+        # Извлекаем runtime информацию если есть
+        runtime_name = "unknown"
+        runtime_build = "unknown"
+        transaction = "unknown"
+        
+        if hasattr(event, 'data') and event.data:
+            contexts = event.data.get('contexts', {})
+            runtime = contexts.get('runtime', {})
+            runtime_name = runtime.get('name', 'unknown')
+            runtime_build = runtime.get('build', 'unknown')
+            transaction = event.data.get('transaction', 'unknown')
+        
+        # Извлекаем metadata
+        metadata_type = "unknown"
+        metadata_filename = "unknown" 
+        metadata_function = "unknown"
+        metadata_value = "unknown"
+        
+        if hasattr(event, 'data') and event.data:
+            metadata = event.data.get('metadata', {})
+            metadata_type = metadata.get('type', 'unknown')
+            metadata_filename = metadata.get('filename', 'unknown')
+            metadata_function = metadata.get('function', 'unknown')
+            metadata_value = metadata.get('value', 'unknown')
 
-        tags = []
-        for tag_key, tag_value in get_tags(event):
-            tags.append("`{}` ".format(tag_value))
-
-        data = {
-            "title": group.message_short,
-            "link": group.get_absolute_url(),
-            "id": event.event_id,
-            "culprit": group.culprit,
-            "env": event.get_environment().name,
-            "project_slug": group.project.slug,
-            "project_name": group.project.name,
-            "tags": " ".join(tags),
-            "level": event.get_tag("level"),
-            "message": event.message,
-            "release": event.release,
-        }
-
-        message_text = self.render_notification(data, self.get_option("custom_format", project))
-
+        # Формируем payload с attachments как в Go коде
         payload = {
             "channel_id": self.get_option("channel_id", project),
-            "message": message_text,
             "username": self.get_option("bot_name", project) or "Sentry",
+            "attachments": [
+                {
+                    "author_name": "Sentry (https://sentry.wb.ru)",
+                    "author_icon": "https://assets.stickpng.com/images/58482eedcef1014c0b5e4a76.png",
+                    "title": "[{}] {}".format(level.upper(), title),
+                    "fallback": "[{}] {}".format(level.upper(), title),
+                    "pretext": "**Event ID**: {}".format(event_id),
+                    "text": message,
+                    "color": "#FF0000",
+                    "title_link": url,
+                    "fields": [
+                        {
+                            "short": False,
+                            "title": "Project Info",
+                            "value": "**Project Name**: {}\n**ProjectID**: {}".format(
+                                project_name, project_id
+                            )
+                        },
+                        {
+                            "short": False,
+                            "title": "Event Info", 
+                            "value": "**Platform**: {}\n**Runtime**: {} [{}]\n**Release**: {}\n**Environment**: {}\n**Transaction**: {}".format(
+                                platform, runtime_name, runtime_build, release, environment, transaction
+                            )
+                        },
+                        {
+                            "short": False,
+                            "title": "Event Metadata",
+                            "value": "**Type**: {}\n**Filename**: {}\n**Function**: {}\n**Description**: {}".format(
+                                metadata_type, metadata_filename, metadata_function, metadata_value
+                            )
+                        }
+                    ]
+                }
+            ]
         }
-
+        
         return payload
 
     def get_config(self, project, **kwargs):
@@ -125,16 +172,16 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         token = self.get_mattermost_token()
         if not token:
             raise Exception("MATTERMOST_TOKEN environment variable is not set")
-
+        
         # Базовый URL для Mattermost API
         mattermost_url = "https://band.wb.ru"
         api_url = f"{mattermost_url}/api/v4/posts"
-
+        
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-
+        
         return safe_urlopen(
             url=api_url,
             json=payload,
@@ -147,13 +194,13 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         event = notification.event
         group = event.group
         project = group.project
-
+        
         if not self.is_configured(project):
             return
-
+            
         channel_id = self.get_option("channel_id", project)
         if not channel_id:
             return
-
+            
         payload = self.create_payload(event)
         return safe_execute(self.send_to_mattermost, channel_id, payload)
