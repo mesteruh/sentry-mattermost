@@ -1,7 +1,7 @@
 # Sentry Mattermost
 
-apt-get update && apt-get install -y git
-pip install git+https://github.com/mesteruh/sentry-mattermost.git@dev#egg=sentry-mattermost
+apt-get update && apt-get install -y git &&
+  pip install git+https://github.com/mesteruh/sentry-mattermost.git@master#egg=sentry-mattermost
 ```
 
 
