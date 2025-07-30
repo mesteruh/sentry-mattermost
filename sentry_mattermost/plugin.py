@@ -96,48 +96,15 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             metadata_function = metadata.get('function', 'unknown')
             metadata_value = metadata.get('value', 'unknown')
 
-        # Формируем payload с attachments как в Go коде
-        payload = {
+        # Временно простое сообщение для теста
+        simple_payload = {
             "channel_id": self.get_option("channel_id", project),
-            "username": self.get_option("bot_name", project) or "Sentry",
-            "attachments": [
-                {
-                    "author_name": "Sentry (https://sentry.wb.ru)",
-                    "author_icon": "https://assets.stickpng.com/images/58482eedcef1014c0b5e4a76.png",
-                    "title": "[{}] {}".format(level.upper(), title),
-                    "fallback": "[{}] {}".format(level.upper(), title),
-                    "pretext": "**Event ID**: {}".format(event_id),
-                    "text": message,
-                    "color": "#FF0000",
-                    "title_link": url,
-                    "fields": [
-                        {
-                            "short": False,
-                            "title": "Project Info",
-                            "value": "**Project Name**: {}\n**ProjectID**: {}".format(
-                                project_name, project_id
-                            )
-                        },
-                        {
-                            "short": False,
-                            "title": "Event Info", 
-                            "value": "**Platform**: {}\n**Runtime**: {} [{}]\n**Release**: {}\n**Environment**: {}\n**Transaction**: {}".format(
-                                platform, runtime_name, runtime_build, release, environment, transaction
-                            )
-                        },
-                        {
-                            "short": False,
-                            "title": "Event Metadata",
-                            "value": "**Type**: {}\n**Filename**: {}\n**Function**: {}\n**Description**: {}".format(
-                                metadata_type, metadata_filename, metadata_function, metadata_value
-                            )
-                        }
-                    ]
-                }
-            ]
+            "message": f"🚨 Sentry Alert: [{level.upper()}] {title}\nEvent ID: {event_id}\nProject: {project_name}\n{url}"
         }
         
-        return payload
+        print(f"[MATTERMOST DEBUG] Simple payload: {simple_payload}")
+        
+        return simple_payload
 
     def get_config(self, project, **kwargs):
         return [
@@ -210,6 +177,10 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             
         print(f"[MATTERMOST DEBUG] Creating payload for channel: {channel_id}")
         payload = self.create_payload(event)
+        print(f"[MATTERMOST DEBUG] Payload created: {payload}")
+        print(f"[MATTERMOST DEBUG] Payload keys: {list(payload.keys())}")
+        if 'attachments' in payload:
+            print(f"[MATTERMOST DEBUG] Attachments: {payload['attachments']}")
         
         print(f"[MATTERMOST DEBUG] Calling send_to_mattermost")
         try:
