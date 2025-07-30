@@ -1,4 +1,6 @@
 from __future__ import absolute_import
+import os
+import json
 
 from sentry import tagstore
 from sentry.plugins.bases import notify
@@ -29,10 +31,10 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
     slug = 'mattermost'
     description = 'Sends alerts to Mattermost channel based on Sentry alerts rules'
     version = sentry_mattermost.VERSION
-    timeout = 3
-    author = 'Nathan KREMER'
-    author_url = 'https://github.com/xd3coder/sentry-mattermost'
-    user_agent = 'sentry-webhooks/%s' % version
+    timeout = 10
+    author = 'Radzhab'
+    author_url = 'https://band.wb.ru'
+    user_agent = 'sentry-mattermost/%s' % version
     feature_descriptions = [
         FeatureDescription(
             """
@@ -42,14 +44,13 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         )
     ]
 
-    def get_tag_list(self, name, project):
-        option = self.get_option(name, project)
-        if option:
-            return set(tag.strip().lower() for tag in option.split(","))
-        return None
-
     def is_configured(self, project):
-        return bool(self.get_option("webhook", project))
+        channel_id = self.get_option("channel_id", project)
+        token = os.getenv("MATTERMOST_TOKEN")
+        return bool(channel_id and token)
+
+    def get_mattermost_token(self):
+        return os.getenv("MATTERMOST_TOKEN")
 
     def render_notification(self, data, customFormat):
         if customFormat:
@@ -58,25 +59,13 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             template = "#### {project_name} - {env}\n{tags}\n\n{culprit}\n[{title}]({link})"
         return template.format(**data)
 
-
     def create_payload(self, event):
         group = event.group
         project = group.project
 
         tags = []
-        included_tags = set(self.get_tag_list("included_tag_keys", project) or [])
-        excluded_tags = set(self.get_tag_list("excluded_tag_keys", project) or [])
         for tag_key, tag_value in get_tags(event):
-            key = tag_key.lower()
-            std_key = tagstore.get_standardized_key(key)
-            if included_tags and key not in included_tags and std_key not in included_tags:
-                continue
-            if excluded_tags and (key in excluded_tags or std_key in excluded_tags):
-                continue
-            if self.get_option("include_keys_with_tags", project) :
-                tags.append("`{}: {}` ".format(tag_key, tag_value))
-            else:
-                tags.append("`{}` ".format(tag_value))
+            tags.append("`{}` ".format(tag_value))
 
         data = {
             "title": group.message_short,
@@ -92,28 +81,37 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             "release": event.release,
         }
 
-        icon_url = "https://xd3coder.github.io/image-host/sentry-mattermost/64/warning.jpg"
-        if self.get_option("logo_match_level", project):
-            icon_url = "https://xd3coder.github.io/image-host/sentry-mattermost/64/" + event.get_tag("level") + ".jpg"
+        message_text = self.render_notification(data, self.get_option("custom_format", project))
+
         payload = {
-            "username": self.get_option("username", project) or "Sentry",
-            "channel": self.get_option("channel", project),
-            "icon_url": icon_url,
-            "text": self.render_notification(data, self.get_option("custom_format", project))
+            "channel_id": self.get_option("channel_id", project),
+            "message": message_text,
+            "username": self.get_option("bot_name", project) or "Sentry",
         }
+
         return payload
 
     def get_config(self, project, **kwargs):
         return [
             {
-                "name": "webhook",
-                "label": "Webhook URL",
-                "type": "url",
-                "required": True,
-                "help": "Your custom Mattermost webhook URL.",
+                "name": "mattermost_url",
+                "label": "Mattermost URL",
+                "type": "text",
+                "required": False,
+                "default": "https://band.wb.ru",
+                "readonly": True,
+                "help": "Your Mattermost instance URL (read-only).",
             },
             {
-                "name": "username",
+                "name": "channel_id",
+                "label": "Channel ID",
+                "type": "string",
+                "required": True,
+                "placeholder": "e.g. channel123456789",
+                "help": "The ID of the Mattermost channel where notifications will be sent.",
+            },
+            {
+                "name": "bot_name",
                 "label": "Bot Name",
                 "type": "string",
                 "placeholder": "e.g. Sentry",
@@ -121,55 +119,26 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
                 "required": False,
                 "help": "The name used in channel when publishing notifications.",
             },
-            {
-                "name": "channel",
-                "label": "Channel Name",
-                "type": "string",
-                "required": False,
-                "help": "Specific channel name for notification.",
-            },
-            {
-                "name": "custom_format",
-                "label": "Formatted message",
-                "type": "textarea",
-                "placeholder": "",
-                "required": False,
-                "help": "Customize notification message, you can use markdown. More informations here https://github.com/xd3coder/sentry-mattermost",
-            },
-            {
-                "name": "logo_match_level",
-                "label": "Background color match notification level",
-                "type": "bool",
-                "required": False,
-                "help": "Avatar in channel will use a color according to Sentry logging level.",
-            },
-            {
-                "name": "include_keys_with_tags",
-                "label": "Include tags keys in messages",
-                "type": "bool",
-                "required": False,
-                "help": "Write keys before tags in rendered messages.",
-            },
-            {
-                "name": "included_tag_keys",
-                "label": "Included Tags",
-                "type": "string",
-                "required": False,
-                "help":  "Only include these tags (comma separated list). Leave empty to include all."
-            },
-            {
-                "name": "excluded_tag_keys",
-                "label": "Excluded Tags",
-                "type": "string",
-                "required": False,
-                "help": "Exclude these tags (comma separated list).",
-            }
         ]
 
-    def send_webhook(self, url, data):
+    def send_to_mattermost(self, channel_id, payload):
+        token = self.get_mattermost_token()
+        if not token:
+            raise Exception("MATTERMOST_TOKEN environment variable is not set")
+
+        # Базовый URL для Mattermost API
+        mattermost_url = "https://band.wb.ru"
+        api_url = f"{mattermost_url}/api/v4/posts"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
         return safe_urlopen(
-            url=url,
-            json=data,
+            url=api_url,
+            json=payload,
+            headers=headers,
             timeout=self.timeout,
             user_agent=self.user_agent
         )
@@ -178,8 +147,13 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         event = notification.event
         group = event.group
         project = group.project
+
         if not self.is_configured(project):
             return
-        webhook = self.get_option("webhook", project).strip()
+
+        channel_id = self.get_option("channel_id", project)
+        if not channel_id:
+            return
+
         payload = self.create_payload(event)
-        return safe_execute(self.send_webhook(webhook, payload))
+        return safe_execute(self.send_to_mattermost, channel_id, payload)
