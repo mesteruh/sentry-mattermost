@@ -60,7 +60,7 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         
         # Получаем данные из event (аналогично gjson в Go коде)
         level = event.get_tag("level") or "error"
-        title = group.message_short or "Unknown Error"
+        title = group.title or "Unknown Error"  # заменил message_short на title
         event_id = event.event_id
         project_name = project.name
         project_id = str(project.id)
@@ -186,8 +186,7 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             url=api_url,
             json=payload,
             headers=headers,
-            timeout=self.timeout,
-            user_agent=self.user_agent
+            timeout=self.timeout
         )
 
     def notify(self, notification, raise_exception=False):
