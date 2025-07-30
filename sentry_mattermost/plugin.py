@@ -186,7 +186,7 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         )
 
     def notify(self, notification, raise_exception=False):
-        print(f"[MATTERMOST DEBUG] notify called for event: {notification.event.event_id}")
+        print(f"[MATTERMOST DEBUG v2.0 WEBHOOK] notify called for event: {notification.event.event_id}")
         
         event = notification.event
         group = event.group
