@@ -1,22 +1,6 @@
 # Sentry Mattermost
 
-A Sentry plugin to send alerts to Mattermost channel.
-Based on the [Sentry-Slack](https://github.com/getsentry/sentry-slack) plugin
-
-### Installation 
-
-#### Sentry versions >= 22.6.0
-In Sentry installation folder go to the `sentry/enhance-image.sh` (if file does not exist copy `sentry/enhance-image.example.sh`)
-Add next lines:
-```
-apt-get update && apt-get install -y git
-pip install git+https://github.com/xd3coder/sentry-mattermost.git@master#egg=sentry-mattermost
-```
-
-#### Legacy Sentry versions (<22.6.0)
-Add the plugin to your `requirements.txt` (if file does not exist copy `sentry/requirements.example.txt`):
-```
-git+https://github.com/xd3coder/sentry-mattermost.git@dev#egg=sentry-mattermost
+git+https://github.com/mesteruh/sentry-mattermost.git@dev#egg=sentry-mattermost
 ```
 
 #### Configuration Steps
