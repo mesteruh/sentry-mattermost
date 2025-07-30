@@ -49,6 +49,7 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
     def is_configured(self, project):
         channel_id = self.get_option("channel_id", project)
         token = os.getenv("MATTERMOST_TOKEN")
+        print(f"[MATTERMOST DEBUG] is_configured: channel_id={channel_id}, token_exists={bool(token)}")
         return bool(channel_id and token)
 
     def get_mattermost_token(self):
@@ -171,7 +172,7 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
     def send_to_mattermost(self, channel_id, payload):
         token = self.get_mattermost_token()
         if not token:
-            raise Exception("MATTERMOST_TOKEN environment variable is not set")
+            raise Exception("MM_BOT_TOKEN environment variable is not set")
         
         # Базовый URL для Mattermost API
         mattermost_url = "https://band.wb.ru"
@@ -190,16 +191,25 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
         )
 
     def notify(self, notification, raise_exception=False):
+        print(f"[MATTERMOST DEBUG] notify called for event: {notification.event.event_id}")
+        
         event = notification.event
         group = event.group
         project = group.project
         
+        print(f"[MATTERMOST DEBUG] Project: {project.name}, Group: {group.id}")
+        
         if not self.is_configured(project):
+            print("[MATTERMOST DEBUG] Plugin not configured, skipping")
             return
             
         channel_id = self.get_option("channel_id", project)
         if not channel_id:
+            print("[MATTERMOST ERROR] No channel_id configured")
             return
             
+        print(f"[MATTERMOST DEBUG] Creating payload for channel: {channel_id}")
         payload = self.create_payload(event)
+        
+        print(f"[MATTERMOST DEBUG] Calling send_to_mattermost")
         return safe_execute(self.send_to_mattermost, channel_id, payload)
