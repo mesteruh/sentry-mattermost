@@ -96,15 +96,43 @@ class Mattermost(CorePluginMixin, notify.NotificationPlugin):
             metadata_function = metadata.get('function', 'unknown')
             metadata_value = metadata.get('value', 'unknown')
 
-        # Временно простое сообщение для теста
-        simple_payload = {
+        # Формируем payload точно как в Go коде
+        payload = {
             "channel_id": self.get_option("channel_id", project),
-            "message": f"🚨 Sentry Alert: [{level.upper()}] {title}\nEvent ID: {event_id}\nProject: {project_name}\n{url}"
+            "attachments": [
+                {
+                    "author_name": "Sentry (https://sentry.wb.ru)",
+                    "author_icon": "https://assets.stickpng.com/images/58482eedcef1014c0b5e4a76.png",
+                    "title": f"[{level.upper()}] {title}",
+                    "fallback": f"[{level.upper()}] {title}",
+                    "pretext": f"**Event ID**: {event_id}",
+                    "text": message or "",
+                    "color": "#FF0000",
+                    "title_link": url,
+                    "fields": [
+                        {
+                            "short": False,
+                            "title": "Project Info",
+                            "value": f"**Project Name**: {project_name}\n**ProjectID**: {project_id}"
+                        },
+                        {
+                            "short": False,
+                            "title": "Event Info",
+                            "value": f"**Platform**: {platform}\n**Runtime**: {runtime_name} [{runtime_build}]\n**Release**: {release}\n**Environment**: {environment}\n**Transaction**: {transaction}"
+                        },
+                        {
+                            "short": False,
+                            "title": "Event Metadata",
+                            "value": f"**Type**: {metadata_type}\n**Filename**: {metadata_filename}\n**Function**: {metadata_function}\n**Description**: {metadata_value}"
+                        }
+                    ]
+                }
+            ]
         }
         
-        print(f"[MATTERMOST DEBUG] Simple payload: {simple_payload}")
+        print(f"[MATTERMOST DEBUG] Go-style payload: {payload}")
         
-        return simple_payload
+        return payload
 
     def get_config(self, project, **kwargs):
         return [
